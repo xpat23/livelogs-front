@@ -13,6 +13,12 @@ make down
 
 API разворачивается отдельно из репозитория [xpat23/livelogs-api](https://github.com/xpat23/livelogs-api).
 
+Для production адрес API задан в `.env.production`.
+
+```sh
+docker compose --env-file .env.production up --build -d --wait
+```
+
 Для другого адреса API передайте переменную окружения при запуске.
 
 ```sh
@@ -48,6 +54,6 @@ make release-front TAG=v1.0.0
 
 ## Kubernetes
 
-Задайте контейнеру `API_URL` с публичным адресом API без пути, например `https://api.example.com`. Этот адрес должен быть доступен из браузера. Если фронтенд открыт по HTTPS, API тоже должен быть доступен по HTTPS.
+В production задайте контейнеру `API_URL=https://api-live.finlogs.org`. Значение хранится в `.env.production`. Kubernetes получает его через переменную окружения или ConfigMap, созданный из этого файла. Этот адрес должен быть доступен из браузера. Если фронтенд открыт по HTTPS, API тоже должен быть доступен по HTTPS.
 
 На бэкенде задайте `CORS_ALLOWED_ORIGINS` с адресом фронтенда со схемой, например `https://tasks.example.com`.
