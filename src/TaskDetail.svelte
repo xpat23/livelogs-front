@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { request } from './api.js';
-  import { dateLabel, duration, localDateTime, logLabel } from './dates.js';
+  import { duration, localDateTime, logLabel } from './dates.js';
   import ConfirmDelete from './ConfirmDelete.svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
@@ -61,17 +61,16 @@
     else back();
   }
 
-  async function update(event, field) {
+  async function update(event, field, property, value) {
     const control = event.currentTarget;
-    const value = control.value;
     error = '';
     busy = true;
-    const body = field === 'status' ? { status: value } : { sprint_id: value ? Number(value) : null };
+    const body = { [property]: value };
     try {
       await request(path + '/' + field, { method: 'PUT', body });
       changed({ ...task, ...body });
     } catch (err) {
-      control.value = field === 'status' ? task.status : (task.sprint_id ?? '');
+      control.value = task[property] ?? '';
       error = err.message;
     } finally {
       busy = false;
@@ -183,22 +182,26 @@
         <Icon name="trash" size={16} /> Удалить задачу
       </button>
     </div>
-    {#if task.planned_date}<p class="task-planned-date"><Icon name="calendar" size={15} /> {dateLabel(task.planned_date)}</p>{/if}
     {#if task.description}<p class="detail-description">{task.description}</p>{/if}
     {#if error}<p class="alert" role="alert">{error}</p>{/if}
     <div class="field-row">
       <label>Статус
-        <select value={task.status} onchange={(event) => update(event, 'status')} disabled={busy}>
+        <select value={task.status} onchange={(event) => update(event, 'status', 'status', event.currentTarget.value)} disabled={busy}>
           {#each columns as column (column.id)}<option value={column.id}>{column.name}</option>{/each}
         </select>
       </label>
       <label>Спринт
-        <select value={task.sprint_id ?? ''} onchange={(event) => update(event, 'sprint')} disabled={busy}>
+        <select value={task.sprint_id ?? ''} onchange={(event) => update(event, 'sprint', 'sprint_id', event.currentTarget.value ? Number(event.currentTarget.value) : null)} disabled={busy}>
           <option value="">Без спринта</option>
           {#each sprints as sprint (sprint.id)}<option value={sprint.id}>{sprint.name}</option>{/each}
         </select>
       </label>
     </div>
+
+    <label class="inline-planned-date">Плановая дата
+      <input type="date" value={task.planned_date ?? ''} disabled={busy}
+        onchange={(event) => update(event, 'planned-date', 'planned_date', event.currentTarget.value || null)} />
+    </label>
 
     <section class="time-section">
       <header>

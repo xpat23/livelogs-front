@@ -344,3 +344,5 @@ textarea { resize: vertical; }
   font-size: 12px; font-weight: 700;
 }
 dialog .task-planned-date { margin-bottom: 12px; }
+
+.inline-planned-date { margin-top: 12px; }
