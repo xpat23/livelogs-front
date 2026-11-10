@@ -338,3 +338,9 @@ textarea { resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   .button, .lane, .task-card { transition: none; }
 }
+
+.task-planned-date {
+  display: inline-flex; align-items: center; gap: 5px; color: var(--accent-dark);
+  font-size: 12px; font-weight: 700;
+}
+dialog .task-planned-date { margin-bottom: 12px; }

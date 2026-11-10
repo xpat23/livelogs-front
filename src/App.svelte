@@ -31,10 +31,13 @@
   let projectID = $state(undefined);
   let start = $state('');
   let end = $state('');
+  let plannedDate = $state('');
+  let todayDate = $state('');
+  let nextDayAt = $state('');
 
   const activeProject = $derived(view.type === 'projects' ? projects.find((item) => item.id === view.id) : null);
   const activeSprint = $derived(view.type === 'sprints' ? sprints.find((item) => item.id === view.id) : null);
-  const title = $derived(activeProject?.name ?? activeSprint?.name ?? (view.type === 'report' ? 'Отчёт по времени' : 'Личное пространство'));
+  const title = $derived(activeProject?.name ?? activeSprint?.name ?? (view.type === 'today' ? 'Сегодня' : view.type === 'report' ? 'Отчёт по времени' : 'Личное пространство'));
   const sprintForm = $derived(dialog === 'sprint' || dialog === 'edit-sprint');
   const editing = $derived(dialog?.startsWith('edit-'));
   const deleting = $derived(dialog?.startsWith('delete-'));
@@ -81,19 +84,35 @@
   $effect(() => {
     const { type, id } = view;
     const currentRevision = revision;
-    if (!id) return;
+    if (!id && type !== 'today') return;
 
     const controller = new AbortController();
     boardError = '';
-    request(`/${type}/${id}/board`, { signal: controller.signal })
+    request(type === 'today' ? '/boards/today' : `/${type}/${id}/board`, { signal: controller.signal })
       .then((data) => {
-        if (!controller.signal.aborted && revision === currentRevision) board = data;
+        if (!controller.signal.aborted && revision === currentRevision) {
+          if (type === 'today') {
+            todayDate = data.date;
+            nextDayAt = data.next_day_at;
+            board = data.board;
+          } else board = data;
+        }
       })
       .catch((err) => {
         if (!controller.signal.aborted) boardError = err.message;
       });
     return () => controller.abort();
   });
+
+  $effect(() => {
+    if (view.type !== 'today' || !nextDayAt) return;
+    const timer = setTimeout(() => revision++, Math.max(1000, Date.parse(nextDayAt) - Date.now() + 100));
+    return () => clearTimeout(timer);
+  });
+
+  function refreshToday() {
+    if (view.type === 'today') revision++;
+  }
 
   function openDialog(mode) {
     menuOpen = false;
@@ -102,6 +121,7 @@
     const project = mode === 'edit-project' ? activeProject : null;
     name = sprint?.name ?? project?.name ?? '';
     description = '';
+    plannedDate = view.type === 'today' ? todayDate : '';
     projectID = activeProject?.id ?? projects[0]?.id;
     start = sprint?.start_date ?? localDate();
     end = sprint?.end_date ?? start;
@@ -140,7 +160,7 @@
         sprints = [...sprints].sort((a, b) => b.start_date.localeCompare(a.start_date) || b.id - a.id);
       } else {
         let task = await request(`/projects/${projectID}/tasks`, {
-          method: 'POST', body: { title: name, description },
+          method: 'POST', body: { title: name, description, planned_date: plannedDate || null },
         });
         if (activeSprint) {
           const sprint_id = activeSprint.id;
@@ -208,6 +228,8 @@
   }
 </script>
 
+<svelte:window onfocus={refreshToday} />
+
 <div class="workspace">
   <aside class="sidebar">
     <div class="sidebar-header">
@@ -223,7 +245,11 @@
 
     <div id="workspace-navigation" class:menu-open={menuOpen} class="sidebar-navigation">
       <nav aria-label="Рабочее пространство">
-        <button class:active={view.type !== 'report'} class="nav-item" onclick={openDefault}>
+        <button class:active={view.type === 'today'} class="nav-item" onclick={() => navigate('today')}
+          aria-current={view.type === 'today' ? 'page' : undefined}>
+          <Icon name="calendar" /> Сегодня
+        </button>
+        <button class:active={view.type !== 'report' && view.type !== 'today'} class="nav-item" onclick={openDefault}>
           <Icon name="board" /> Доски
         </button>
         <button class:active={view.type === 'report'} class="nav-item" onclick={() => navigate('report')}
@@ -278,7 +304,9 @@
       <div>
         <p class="eyebrow"><span></span>{activeSprint ? 'Спринт' : activeProject ? 'Доска проекта' : view.type === 'report' ? 'Отчёты' : 'Планирование'}</p>
         <h1>{title}</h1>
-        {#if activeSprint}
+        {#if view.type === 'today'}
+          <p class="page-description"><Icon name="calendar" size={16} /> {todayDate ? dateLabel(todayDate) : 'Загружаем дату…'} <span>·</span> Все проекты</p>
+        {:else if activeSprint}
           <p class="page-description"><Icon name="calendar" size={16} /> {dateLabel(activeSprint.start_date)} — {dateLabel(activeSprint.end_date)} <span>·</span> Все проекты</p>
         {:else if activeProject}
           <p class="page-description">Задачи проекта по статусам</p>
@@ -289,7 +317,7 @@
         {/if}
       </div>
       {#if view.type !== 'report' && !loading && !workspaceError}
-        <button class="button primary" onclick={() => openDialog(projects.length ? 'task' : 'project')} disabled={saving}>
+        <button class="button primary" onclick={() => openDialog(projects.length ? 'task' : 'project')} disabled={saving || (view.type === 'today' && !todayDate)}>
           <Icon name="plus" /> {projects.length ? 'Новая задача' : 'Новый проект'}
         </button>
       {/if}
@@ -332,7 +360,7 @@
       {#if boardError}
         <p class="alert" role="alert">{boardError} <button class="text-button" onclick={() => revision++}>Повторить</button></p>
       {:else if board}
-        <Board {board} {projects} {columns} showProjects={view.type === 'sprints'} openTask={(task) => selected = task}
+        <Board {board} {projects} {columns} showProjects={view.type === 'sprints' || view.type === 'today'} openTask={(task) => selected = task}
           addTask={() => openDialog('task')} {moveTask} busy={saving} />
       {:else}
         <p class="loading" role="status">Загружаем доску…</p>
@@ -367,6 +395,7 @@
               {#each projects as project (project.id)}<option value={project.id}>{project.name}</option>{/each}
             </select></label>
           {/if}
+          <label>Плановая дата <input type="date" bind:value={plannedDate} disabled={saving} /></label>
           <label>Описание <textarea bind:value={description} rows="3" disabled={saving} placeholder="Добавьте детали"></textarea></label>
         {/if}
         {#if formError}<p class="alert" role="alert">{formError}</p>{/if}

@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { request } from './api.js';
-  import { duration, localDateTime, logLabel } from './dates.js';
+  import { dateLabel, duration, localDateTime, logLabel } from './dates.js';
   import ConfirmDelete from './ConfirmDelete.svelte';
   import Icon from './Icon.svelte';
   import Modal from './Modal.svelte';
@@ -13,7 +13,7 @@
   let logError = $state('');
   let mode = $state('detail');
   let activeEntry = $state(null);
-  let taskDraft = $state({ title: '', description: '' });
+  let taskDraft = $state({ title: '', description: '', plannedDate: '' });
   let timeDraft = $state({ started: localDateTime(), minutes: undefined, note: '' });
   let entryDraft = $state({ started: '', minutes: undefined, note: '' });
   const controller = new AbortController();
@@ -45,7 +45,7 @@
     activeEntry = entry;
     mode = nextMode;
     if (nextMode === 'edit-task') {
-      taskDraft = { title: task.title, description: task.description };
+      taskDraft = { title: task.title, description: task.description, plannedDate: task.planned_date ?? '' };
     }
     if (nextMode === 'edit-entry') {
       entryDraft = { started: localDateTime(new Date(entry.started_at)), minutes: entry.minutes, note: entry.note };
@@ -88,7 +88,7 @@
     error = '';
     busy = true;
     try {
-      const body = { title, description: taskDraft.description };
+      const body = { title, description: taskDraft.description, planned_date: taskDraft.plannedDate || null };
       await request(path, { method: 'PUT', body });
       changed({ ...task, ...body });
       back();
@@ -152,6 +152,7 @@
   {#if mode === 'edit-task'}
     <form class="create-form" onsubmit={saveTask}>
       <label>Название <input bind:value={taskDraft.title} required disabled={busy} /></label>
+      <label>Плановая дата <input type="date" bind:value={taskDraft.plannedDate} disabled={busy} /></label>
       <label>Описание <textarea bind:value={taskDraft.description} rows="3" disabled={busy}></textarea></label>
       {#if error}<p class="alert" role="alert">{error}</p>{/if}
       <div class="form-actions">
@@ -182,6 +183,7 @@
         <Icon name="trash" size={16} /> Удалить задачу
       </button>
     </div>
+    {#if task.planned_date}<p class="task-planned-date"><Icon name="calendar" size={15} /> {dateLabel(task.planned_date)}</p>{/if}
     {#if task.description}<p class="detail-description">{task.description}</p>{/if}
     {#if error}<p class="alert" role="alert">{error}</p>{/if}
     <div class="field-row">

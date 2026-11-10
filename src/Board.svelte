@@ -1,4 +1,5 @@
 <script>
+  import { dateLabel } from './dates.js';
   import Icon from './Icon.svelte';
 
   let { board, projects, columns, showProjects, openTask, addTask, moveTask, busy } = $props();
@@ -57,6 +58,7 @@
             </span>
             <span class="task-title">{task.title}</span>
             {#if task.description}<span class="task-description">{task.description}</span>{/if}
+            {#if task.planned_date}<span class="task-planned-date"><Icon name="calendar" size={14} /> {dateLabel(task.planned_date)}</span>{/if}
             <span class="task-footer"><Icon name="clock" size={15} /> Время и детали <Icon name="arrow" size={13} /></span>
           </button>
         {:else}
