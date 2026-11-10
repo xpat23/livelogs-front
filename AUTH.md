@@ -1,6 +1,6 @@
 # Google login
 
-Frontend calls `AUTH_URL/api/auth/open-auth` with a Google `id_token`. The auth service handles first login and returns access/refresh tokens. Tokens live in the browser's sessionStorage (per tab); closing the tab ends local persistence. The frontend renews access tokens directly via `AUTH_URL/api/auth/refresh-token`, serializes refresh requests, and retries an API 401 once. Logout clears local tokens; the auth service currently has no revocation endpoint, so issued tokens remain valid until expiry.
+Frontend calls `AUTH_URL/api/auth/open-auth` with a Google `id_token`. The auth service handles first login and returns access/refresh tokens. Tokens persist in localStorage across browser restarts. Existing sessionStorage tokens migrate automatically on first load. Logout clears both stores and synchronizes open tabs. The frontend renews access tokens directly via `AUTH_URL/api/auth/refresh-token`, serializes refresh requests across tabs with Web Locks where available, and retries an API 401 once. Logout clears local tokens; the auth service currently has no revocation endpoint, so issued tokens remain valid until expiry.
 
 API has no sessions or refresh-token database. Each `/api/*` request must carry `Authorization: Bearer <accessToken>`. API verifies HS256 signature, expiration, issued-at and the `username` email claim. The email becomes the owner of projects, sprints, tasks, columns and time entries. `/healthz` is public; `/api/me` returns the authenticated email.
 
@@ -22,10 +22,10 @@ Frontend runtime env:
 
 Auth service env:
 
-- `CORS_ALLOWED_ORIGINS=https://live.finlogs.org,http://localhost:4000,http://127.0.0.1:4000`
 - Existing `GOOGLE_CLIENT_ID` and `JWT_SECRET_KEY` stay configured there.
+- Auth-service enables wildcard CORS in code; no CORS env is needed.
 
-In Google Cloud OAuth client, add authorized JavaScript origins `https://live.finlogs.org`, `http://localhost:4000`, `http://127.0.0.1:4000`. Google Identity Services uses a JavaScript callback; this integration adds no redirect URL. Deploy the auth-service CORS change before browser login can work.
+In Google Cloud OAuth client, add authorized JavaScript origins `https://live.finlogs.org`, `http://localhost:4000`, `http://127.0.0.1:4000`. Google Identity Services uses a JavaScript callback; this integration adds no redirect URL. Auth-service must be reachable from the browser.
 
 The runtime environment is read on container startup through `/config.json`, so one frontend image works across environments. `.env.production` is an example for deployment, not a file automatically loaded by Kubernetes. For Vite dev, use variables from `.env.example`.
 

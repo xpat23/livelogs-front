@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 let index = 0;
 async function setup(expiry = 0) {
   const values = new Map();
-  globalThis.sessionStorage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+  globalThis.localStorage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+  const legacyValues = new Map();
+  globalThis.sessionStorage = { getItem: (key) => legacyValues.get(key), setItem: (key, value) => legacyValues.set(key, value), removeItem: (key) => legacyValues.delete(key) };
+  Object.defineProperty(globalThis.navigator, 'locks', { value: undefined, configurable: true });
   globalThis.window = new EventTarget();
   const calls = [];
   let refreshCount = 0;
@@ -23,7 +26,7 @@ async function setup(expiry = 0) {
   };
   const api = await import(`./api.js?test=${++index}`);
   await api.login('google-credential');
-  return { api, calls, values, count: () => refreshCount, fail: () => { failRefresh = true; } };
+  return { api, calls, values, legacyValues, count: () => refreshCount, fail: () => { failRefresh = true; } };
 }
 
 test('direct auth exchange, single refresh for concurrent requests and Bearer header', async () => {
@@ -69,4 +72,52 @@ test('temporary refresh error retains tokens for retry', async () => {
   globalThis.fetch = (url, opts) => url.endsWith('/refresh-token') ? Promise.resolve(new Response('', { status: 503 })) : original(url, opts);
   await assert.rejects(api.request('/me'), /временно недоступен/);
   assert.equal(api.hasTokens(), true);
+});
+
+
+test('tokens survive a fresh module and rotated pair persists after expired access token', async () => {
+  const { api, values, count } = await setup();
+  assert.equal(values.has('livelogs.tokens'), true);
+  const reopened = await import(`./api.js?test=${++index}`);
+  assert.equal(reopened.hasTokens(), true);
+  await reopened.request('/me');
+  assert.equal(count(), 1);
+  assert.equal(JSON.parse(values.get('livelogs.tokens')).refreshToken, 'refresh-2');
+  const again = await import(`./api.js?test=${++index}`);
+  await again.request('/me');
+  assert.equal(count(), 1);
+  api.logout();
+});
+
+test('existing sessionStorage login migrates to localStorage', async () => {
+  const { values, legacyValues } = await setup(Date.now() / 1000 + 3600);
+  const old = values.get('livelogs.tokens');
+  values.clear(); legacyValues.set('livelogs.tokens', old);
+  const migrated = await import(`./api.js?test=${++index}`);
+  assert.equal(migrated.hasTokens(), true);
+  assert.equal(JSON.parse(values.get('livelogs.tokens')).refreshToken, 'refresh-1');
+  assert.equal(legacyValues.size, 0);
+});
+
+test('two tabs serialize rotating refresh tokens with a shared lock', async () => {
+  const { api, count } = await setup();
+  const secondTab = await import(`./api.js?test=${++index}`);
+  let queue = Promise.resolve();
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+    request: (_name, callback) => { const next = queue.then(callback); queue = next.catch(() => {}); return next; },
+  } });
+  await Promise.all([api.request('/projects'), secondTab.request('/sprints')]);
+  assert.equal(count(), 1);
+});
+
+test('logout in another tab invalidates local identity through storage event', async () => {
+  const { api, values } = await setup();
+  const secondTab = await import(`./api.js?test=${++index}`);
+  api.logout();
+  const event = new Event('storage');
+  Object.defineProperties(event, { key: { value: 'livelogs.tokens' }, storageArea: { value: localStorage } });
+  window.dispatchEvent(event);
+  assert.equal(secondTab.hasTokens(), false);
+  assert.equal(values.size, 0);
+  await assert.rejects(secondTab.request('/me'), secondTab.AuthRequired);
 });

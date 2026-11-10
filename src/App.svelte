@@ -60,17 +60,25 @@
   onMount(() => {
     restoreLogin();
     window.addEventListener('auth-expired', signOut);
-    return () => window.removeEventListener('auth-expired', signOut);
+    window.addEventListener('auth-changed', syncLogin);
+    return () => {
+      window.removeEventListener('auth-expired', signOut);
+      window.removeEventListener('auth-changed', syncLogin);
+    };
   });
 
   async function restoreLogin() {
+    const epoch = workspaceEpoch;
     checkingAuth = true;
     authError = '';
     try {
-      if (hasTokens()) signedIn(await request('/me'));
+      if (hasTokens()) {
+        const identity = await request('/me');
+        if (epoch === workspaceEpoch) signedIn(identity);
+      }
     } catch (err) {
-      if (!(err instanceof AuthRequired)) authError = err.message;
-    } finally { checkingAuth = false; }
+      if (epoch === workspaceEpoch && !(err instanceof AuthRequired)) authError = err.message;
+    } finally { if (epoch === workspaceEpoch) checkingAuth = false; }
   }
 
   function signedIn(identity) {
@@ -80,6 +88,17 @@
 
   function signOut() {
     logout();
+    resetWorkspace();
+    checkingAuth = false;
+    authError = '';
+  }
+
+  function syncLogin() {
+    resetWorkspace();
+    restoreLogin();
+  }
+
+  function resetWorkspace() {
     workspaceEpoch++;
     user = null;
     projects = []; sprints = []; columns = []; board = null;

@@ -1,10 +1,50 @@
 const env = import.meta.env || {};
 let configRequest;
 const storageKey = 'livelogs.tokens';
-let tokens;
-try { tokens = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); } catch { tokens = null; }
+let tokens = null;
+let storageAvailable = true;
 let generation = 0;
 let refreshing;
+
+function readTokens(value) {
+  try {
+    const pair = JSON.parse(value || 'null');
+    return typeof pair?.accessToken === 'string' && typeof pair?.refreshToken === 'string'
+      ? { ...pair, loginID: pair.loginID || pair.refreshToken } : null;
+  } catch { return null; }
+}
+try { tokens = readTokens(localStorage.getItem(storageKey)); } catch { storageAvailable = false; }
+if (!tokens) {
+  try {
+    tokens = readTokens(sessionStorage.getItem(storageKey));
+    if (tokens) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(tokens));
+        storageAvailable = true;
+      } catch { storageAvailable = false; }
+    }
+  } catch { /* Legacy storage may be unavailable. */ }
+}
+if (storageAvailable) {
+  try { sessionStorage.removeItem(storageKey); } catch { /* Legacy storage may be unavailable. */ }
+}
+
+function syncStoredTokens() {
+  if (!storageAvailable) return;
+  let latest;
+  try { latest = readTokens(localStorage.getItem(storageKey)); } catch { return; }
+  const identityChanged = tokens?.loginID !== latest?.loginID;
+  tokens = latest;
+  if (identityChanged) {
+    generation++;
+    refreshing = undefined;
+    window.dispatchEvent(new Event('auth-changed'));
+  }
+}
+window.addEventListener('storage', (event) => {
+  if (!storageAvailable) return;
+  if (event.storageArea === localStorage && (event.key === storageKey || event.key === null)) syncStoredTokens();
+});
 
 export class AuthRequired extends Error {
   constructor() { super('Войдите через Google, чтобы продолжить.'); }
@@ -27,9 +67,10 @@ export function hasTokens() { return !!tokens?.accessToken && !!tokens?.refreshT
 function persist(pair) {
   tokens = pair;
   try {
-    if (pair) sessionStorage.setItem(storageKey, JSON.stringify(pair));
-    else sessionStorage.removeItem(storageKey);
-  } catch { /* Private browsing may disable storage; keep tokens in memory. */ }
+    if (pair) localStorage.setItem(storageKey, JSON.stringify(pair));
+    else localStorage.removeItem(storageKey);
+  } catch { storageAvailable = false; /* Keep tokens in memory when storage is unavailable. */ }
+  try { sessionStorage.removeItem(storageKey); } catch { /* Legacy storage may be unavailable. */ }
 }
 export function logout() { generation++; persist(null); refreshing = undefined; }
 function expired() {
@@ -59,20 +100,32 @@ export async function login(credential) {
   const version = ++generation;
   const pair = await exchange('open-auth', { id_token: credential });
   if (version !== generation) throw new AuthRequired();
-  persist(pair);
+  persist({ ...pair, loginID: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` });
 }
-async function refresh() {
+async function refresh(rejectedToken) {
   if (!hasTokens()) throw new AuthRequired();
   if (!refreshing) {
     const version = generation;
-    const refreshToken = tokens.refreshToken;
-    const pending = exchange('refresh-token', { refresh_token: refreshToken }).then((pair) => {
-      if (version !== generation) throw new AuthRequired();
-      persist(pair);
-    }).catch((error) => {
-      if (version === generation && error instanceof AuthRequired) expired();
-      throw error;
-    }).finally(() => { if (refreshing === pending) refreshing = undefined; });
+    const renew = async () => {
+      syncStoredTokens();
+      if (version !== generation || !hasTokens()) throw new AuthRequired();
+      if (rejectedToken ? tokens.accessToken !== rejectedToken : expiry() > Date.now() / 1000 + 30) return;
+      const { refreshToken, loginID } = tokens;
+      try {
+        const pair = await exchange('refresh-token', { refresh_token: refreshToken });
+        syncStoredTokens();
+        if (version !== generation) throw new AuthRequired();
+        persist({ ...pair, loginID });
+      } catch (error) {
+        syncStoredTokens();
+        if (version !== generation) throw new AuthRequired();
+        if (error instanceof AuthRequired) expired();
+        throw error;
+      }
+    };
+    const locks = globalThis.navigator?.locks;
+    const pending = (locks ? locks.request('livelogs.refresh', renew) : renew())
+      .finally(() => { if (refreshing === pending) refreshing = undefined; });
     refreshing = pending;
   }
   return refreshing;
@@ -92,7 +145,7 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
   let response = await send();
   if (version !== generation) throw new AuthRequired();
   if (response.status === 401) {
-    if (tokens.accessToken === sentToken) await refresh();
+    if (tokens.accessToken === sentToken) await refresh(sentToken);
     if (version !== generation) throw new AuthRequired();
     response = await send();
   }
