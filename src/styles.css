@@ -371,3 +371,18 @@ dialog .task-planned-date { margin-bottom: 12px; }
 @media (max-width: 700px), (hover: none) and (pointer: coarse) {
   input, select, textarea { font-size: 16px; line-height: 1.4; }
 }
+
+.login-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 15% 15%, #e1ddff, transparent 55%), radial-gradient(ellipse at 85% 85%, #d3f5ec, transparent 55%), #f8fafc; }
+.login-card { width: min(100%, 460px); text-align: center; padding: 44px 28px; border: 1px solid #fff; border-radius: 28px; background: #ffffffdb; box-shadow: 0 24px 80px #443c8714; }
+.login-card h1 { font-size: clamp(26px, 6vw, 34px); margin: 14px 0; letter-spacing: -1px; }
+.login-card > p:not(.eyebrow):not(.alert) { color: #667085; line-height: 1.6; }
+.login-card .eyebrow { justify-content: center; margin-top: 24px; }
+.login-card small { display: block; color: #667085; line-height: 1.6; margin-top: 24px; }
+.google-button { display: flex; justify-content: center; margin-top: 28px; min-height: 44px; }
+.google-button.signing-in { pointer-events: none; opacity: .6; }
+.sidebar-foot.account > div { min-width: 0; }
+.sidebar-foot.account strong { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.sidebar-foot.account button { border: 0; background: none; padding: 4px 0 0; color: #6553cd; cursor: pointer; font: inherit; font-size: 12px; }
+@media (max-width: 700px) {
+  .workspace.menu-open .sidebar-foot.account { display: flex; margin-top: auto; }
+}

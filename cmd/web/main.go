@@ -22,7 +22,7 @@ func main() {
 	mux.HandleFunc("GET /config.json", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]string{"api_url": apiURL}); err != nil {
+		if err := json.NewEncoder(w).Encode(map[string]string{"api_url": apiURL, "auth_url": os.Getenv("AUTH_URL"), "google_client_id": os.Getenv("GOOGLE_CLIENT_ID")}); err != nil {
 			log.Printf("write frontend configuration: %v", err)
 		}
 	})

@@ -3,5 +3,7 @@ services:
     build: .
     environment:
       API_URL: "${API_URL:-http://127.0.0.1:8068}"
+      AUTH_URL: "${AUTH_URL:-https://auth.finlogs.org}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-350839092167-6paoa2hq1ci7orhkptp42n9mp92mqp7l.apps.googleusercontent.com}"
     ports:
       - "127.0.0.1:4000:4000"

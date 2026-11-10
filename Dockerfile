@@ -19,5 +19,6 @@ COPY --from=server /out/web /web-server
 COPY --from=build /src/dist /web
 USER 65532:65532
 ENV API_URL=http://127.0.0.1:8068
+ENV AUTH_URL=https://auth.finlogs.org
 EXPOSE 4000
 ENTRYPOINT ["/web-server"]

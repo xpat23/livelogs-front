@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
-  import { request } from './api.js';
+  import { request, hasTokens, logout, AuthRequired } from './api.js';
+  import Login from './Login.svelte';
   import { dateLabel, localDate } from './dates.js';
   import Board from './Board.svelte';
   import ColumnSettings from './ColumnSettings.svelte';
@@ -10,6 +11,10 @@
   import Report from './Report.svelte';
   import TaskDetail from './TaskDetail.svelte';
 
+  let user = $state(null);
+  let checkingAuth = $state(true);
+  let authError = $state('');
+  let workspaceEpoch = 0;
   let projects = $state([]);
   let columns = $state([]);
   let configuring = $state(false);
@@ -52,18 +57,51 @@
   }[dialog]);
   const taskCount = $derived(board ? Object.values(board).reduce((total, tasks) => total + tasks.length, 0) : 0);
 
-  onMount(() => { loadWorkspace(); });
+  onMount(() => {
+    restoreLogin();
+    window.addEventListener('auth-expired', signOut);
+    return () => window.removeEventListener('auth-expired', signOut);
+  });
+
+  async function restoreLogin() {
+    checkingAuth = true;
+    authError = '';
+    try {
+      if (hasTokens()) signedIn(await request('/me'));
+    } catch (err) {
+      if (!(err instanceof AuthRequired)) authError = err.message;
+    } finally { checkingAuth = false; }
+  }
+
+  function signedIn(identity) {
+    user = identity;
+    loadWorkspace();
+  }
+
+  function signOut() {
+    logout();
+    workspaceEpoch++;
+    user = null;
+    projects = []; sprints = []; columns = []; board = null;
+    view = { type: 'home' }; selected = null; dialog = null;
+    configuring = false; menuOpen = false; notice = ''; workspaceError = '';
+    todayDate = ''; nextDayAt = ''; saving = false;
+    window.google?.accounts?.id?.disableAutoSelect();
+  }
 
   async function loadWorkspace() {
+    const epoch = workspaceEpoch;
     loading = true;
     workspaceError = '';
     try {
-      [projects, sprints, columns] = await Promise.all([request('/projects'), request('/sprints'), request('/columns')]);
+      const data = await Promise.all([request('/projects'), request('/sprints'), request('/columns')]);
+      if (epoch !== workspaceEpoch) return;
+      [projects, sprints, columns] = data;
       if (view.type === 'home') openDefault();
     } catch (err) {
-      workspaceError = err.message;
+      if (epoch === workspaceEpoch) workspaceError = err.message;
     } finally {
-      loading = false;
+      if (epoch === workspaceEpoch) loading = false;
     }
   }
 
@@ -84,7 +122,7 @@
   $effect(() => {
     const { type, id } = view;
     const currentRevision = revision;
-    if (!id && type !== 'today') return;
+    if (!user || (!id && type !== 'today')) return;
 
     const controller = new AbortController();
     boardError = '';
@@ -243,6 +281,14 @@
 
 <svelte:window onfocus={refreshToday} onkeydown={(event) => { if (event.key === 'Escape') menuOpen = false; }} />
 
+{#if checkingAuth || authError}
+  <main class="login-page"><section class="login-card"><img src="/focus.svg" alt="" width="64" height="64" />
+    {#if authError}<p class="alert" role="alert">{authError}</p><button class="button" onclick={restoreLogin}>Повторить</button><button class="button" onclick={() => { signOut(); authError = ''; }}>Выйти</button>
+    {:else}<p role="status">Открываем пространство…</p>{/if}
+  </section></main>
+{:else if !user}
+  <Login onlogin={signedIn} />
+{:else}
 <div class="workspace" class:menu-open={menuOpen}>
   <aside class="sidebar">
     <div class="sidebar-header">
@@ -304,7 +350,7 @@
 
     </div>
 
-    <div class="sidebar-foot"><span class="avatar">Я</span><strong>Моё пространство</strong></div>
+    <div class="sidebar-foot account"><span class="avatar">{user.email[0].toUpperCase()}</span><div><strong title={user.email}>{user.email}</strong><button type="button" onclick={signOut}>Выйти</button></div></div>
   </aside>
 
   <main>
@@ -424,4 +470,6 @@
     <TaskDetail task={selected} project={projects.find((item) => item.id === selected.project_id)}
       {sprints} {columns} close={() => selected = null} changed={taskChanged} deleted={taskDeleted} />
   {/key}
+{/if}
+
 {/if}
