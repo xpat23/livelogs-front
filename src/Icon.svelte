@@ -2,6 +2,7 @@
   let { name, size = 18 } = $props();
 
   const icons = {
+    grip: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01',
     menu: 'M4 6h16M4 12h16M4 18h16',
     up: 'm6 14 6-6 6 6',
     down: 'm6 10 6 6 6-6',

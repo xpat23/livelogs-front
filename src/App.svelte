@@ -162,7 +162,7 @@
         let task = await request(`/projects/${projectID}/tasks`, {
           method: 'POST', body: { title: name, description, planned_date: plannedDate || null },
         });
-        if (activeSprint) {
+        if (activeSprint && task.sprint_id == null) {
           const sprint_id = activeSprint.id;
           try {
             await request(`/tasks/${task.id}/sprint`, { method: 'PUT', body: { sprint_id } });
@@ -171,6 +171,10 @@
             notice = 'Задача создана в проекте. Выберите спринт в карточке задачи, чтобы добавить её на эту доску.';
             selected = task;
           }
+        } else if (activeSprint && task.sprint_id !== activeSprint.id) {
+          const sprint = sprints.find((item) => item.id === task.sprint_id);
+          notice = `Задача создана в спринте «${sprint?.name ?? task.sprint_id}», выбранном по плановой дате.`;
+          selected = task;
         }
         revision++;
       }
@@ -217,10 +221,19 @@
   async function moveTask(task, status) {
     saving = true;
     notice = '';
+    const previousBoard = board;
+    const previousView = view;
+    board = Object.fromEntries(Object.entries(board).map(([column, tasks]) => [
+      column,
+      column === status
+        ? [...tasks, { ...task, status }]
+        : tasks.filter((item) => item.id !== task.id),
+    ]));
     try {
       await request(`/tasks/${task.id}/status`, { method: 'PUT', body: { status } });
       revision++;
     } catch (err) {
+      if (view === previousView) board = previousBoard;
       notice = err.message;
     } finally {
       saving = false;
@@ -228,9 +241,9 @@
   }
 </script>
 
-<svelte:window onfocus={refreshToday} />
+<svelte:window onfocus={refreshToday} onkeydown={(event) => { if (event.key === 'Escape') menuOpen = false; }} />
 
-<div class="workspace">
+<div class="workspace" class:menu-open={menuOpen}>
   <aside class="sidebar">
     <div class="sidebar-header">
       <button type="button" class="brand" onclick={openDefault} aria-label="Фокус — открыть доску">

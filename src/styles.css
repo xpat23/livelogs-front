@@ -204,7 +204,24 @@ h1 {
   box-shadow: var(--shadow); transition: border-color .16s, box-shadow .16s;
 }
 .task-card:hover { border-color: var(--lane-mark); box-shadow: 0 5px 13px #313b8420; }
-.task-card.dragging { opacity: .45; }
+.task-card.dragging { opacity: .28; border-style: dashed; box-shadow: none; }
+.task-card[draggable="true"] { cursor: grab; }
+.task-card[draggable="true"]:active { cursor: grabbing; }
+.task-grip { display: inline-flex; margin-left: auto; color: #8992af; }
+.task-card.drag-preview {
+  pointer-events: none; transform: rotate(3deg); opacity: 1;
+  box-shadow: 0 18px 40px #25264d42; border-color: var(--lane-mark); z-index: 10000;
+}
+.drop-placeholder {
+  display: grid; place-items: center; min-height: 95px; padding: 14px;
+  border: 2px dashed var(--lane-mark); border-radius: 12px;
+  background: var(--lane-chip); color: var(--lane-ink); font-size: 12px; font-weight: 750;
+}
+.drop-arrival { animation: card-arrival .25s ease-out; }
+@keyframes card-arrival {
+  from { box-shadow: 0 0 0 3px var(--lane-mark); transform: scale(.98); }
+  to { box-shadow: var(--shadow); transform: scale(1); }
+}
 .task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .task-id { font-size: 11px; font-weight: 760; font-variant-numeric: tabular-nums; color: var(--muted); }
 .project-tag {
@@ -306,6 +323,9 @@ textarea { resize: vertical; }
 }
 @media (max-width: 700px) {
   .workspace { display: block; }
+  .workspace.menu-open main { display: none; }
+  .workspace.menu-open .sidebar { min-height: 100dvh; }
+
   .sidebar { position: static; height: auto; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 12px; }
   .sidebar-header .mobile-menu { display: inline-grid; width: 40px; height: 40px; background: var(--accent-soft); }
   .brand { padding: 0; }
@@ -337,6 +357,7 @@ textarea { resize: vertical; }
 }
 @media (prefers-reduced-motion: reduce) {
   .button, .lane, .task-card { transition: none; }
+  .drop-arrival { animation: none; }
 }
 
 .task-planned-date {
@@ -346,3 +367,7 @@ textarea { resize: vertical; }
 dialog .task-planned-date { margin-bottom: 12px; }
 
 .inline-planned-date { margin-top: 12px; }
+
+@media (max-width: 700px), (hover: none) and (pointer: coarse) {
+  input, select, textarea { font-size: 16px; line-height: 1.4; }
+}
